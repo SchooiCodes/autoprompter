@@ -57,7 +57,8 @@ Pass these in the plugin entry's `options` object:
 | `skillPath` | bundled copy | Absolute path to a live `prompt-optimizer` folder. |
 | `model` | auto-discovered | `{ "providerID": "opencode", "id": "..." }` override. |
 | `excludePrefixes` | `["/", "!"]` | Prompts starting with these pass through unchanged. |
-| `timeoutMs` | `30000` | Max wait for the optimizer model, in milliseconds. |
+| `timeoutMs` | `30000` | Max total wait across all optimizer attempts, in milliseconds. |
+| `maxCandidates` | `6` | How many free models to try (the fallback is always kept). |
 | `log` | `false` | Log every original → optimized rewrite. |
 
 ## How it works
@@ -78,10 +79,20 @@ only the rewritten text.
 
 ## Model selection
 
-`pickModel()` filters `ctx.model.list()` to provider `opencode` with `free` in
-the model id, ranks fast/flash models first (`deepseek-v4.1-flash-free`,
-`mimo-v2.6-flash-free`, `hy4-flash-free`, `beam-free`, ...), and picks the
-highest-ranked model. If discovery fails it falls back to `opencode/beam-free`.
+The plugin discovers **every free model from every provider** (`opencode`,
+`openrouter`, custom providers, ...) and ranks them:
+
+1. The model the current session is using (so the optimizer matches the model
+   you are already talking to).
+2. Known-fast free models: `hy4-flash-free`, `deepseek-v4.1-flash-free`,
+   `mimo-v2.6-flash-free`, `beam-free`, `nemotron-3.5-lightning-free`.
+3. Any other free model, with a hardcoded `opencode/beam-free` fallback always
+   kept as the last candidate.
+
+If the first candidate is rate-limited, errors, or returns an empty result, the
+plugin tries the next free model instead of failing open immediately. Only when
+**all** candidates fail does the original prompt pass through unchanged. An
+explicit `options.model` overrides all of this and is used exclusively.
 
 Note: OpenCode's `model.list()` returns `{ data: [...] }` in practice even
 though the docs describe an array; both shapes are handled.

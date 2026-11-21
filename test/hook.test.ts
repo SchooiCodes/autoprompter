@@ -5,6 +5,7 @@ import plugin from "../src/index.js"
 type GenerateInput = { model: { providerID: string; id: string }; prompt: string }
 type GenerateImpl = (input: GenerateInput) => Promise<{ text: string }>
 type HookCb = (event: {
+  model?: { providerID: string; id: string }
   prompt: { text: string; files?: Array<{ mention?: unknown; [k: string]: unknown }> }
 }) => Promise<void> | void
 
@@ -129,6 +130,58 @@ test("retryAfterMs error pauses optimization until cooldown expires", async () =
   assert.equal(calls, 1)
   await hook({ prompt: { text: "second" } })
   assert.equal(calls, 1, "second prompt must be skipped while cooling down")
+})
+
+test("falls back to another free model when the session model is rate limited", async () => {
+  const attempted: string[] = []
+  let disposed = false
+  let hook: HookCb | undefined
+  const ctx = {
+    options: { enabled: true },
+    model: {
+      list: async () => [
+        { providerID: "opencode", id: "opencode/rate-limited-free", modelID: "rate-limited-free" },
+        {
+          providerID: "openrouter",
+          id: "openrouter/google/gemma-4-26b-a4b-it:free",
+          modelID: "google/gemma-4-26b-a4b-it:free",
+        },
+      ],
+    },
+    session: {
+      hook: async (_name: string, cb: HookCb) => {
+        hook = cb
+        return { dispose: () => { disposed = true } }
+      },
+    },
+    experimental: {
+      generate: {
+        text: async (input: GenerateInput) => {
+          attempted.push(`${input.model.providerID}/${input.model.id}`)
+          if (input.model.id === "rate-limited-free") {
+            const error = new Error("rate limited") as Error & { retryAfterMs: number }
+            error.retryAfterMs = 1000
+            throw error
+          }
+          return { text: "FALLBACK_OK" }
+        },
+      },
+    },
+  }
+
+  const cleanup = await plugin.setup(ctx as never)
+  if (!hook) throw new Error("prompt hook was not registered")
+  const event = {
+    model: { providerID: "opencode", id: "rate-limited-free" },
+    prompt: { text: "original task" },
+  }
+  await hook(event)
+
+  assert.equal(event.prompt.text, "FALLBACK_OK")
+  assert.equal(attempted[0], "opencode/rate-limited-free")
+  assert.equal(attempted[1], "openrouter/google/gemma-4-26b-a4b-it:free")
+  await cleanup?.()
+  assert.equal(disposed, true)
 })
 
 test("enabled:false disables the plugin entirely", async () => {
