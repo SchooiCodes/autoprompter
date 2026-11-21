@@ -1,0 +1,25 @@
+{
+  "name": "autoprompter",
+  "version": "1.0.0",
+  "description": "OpenCode V2 plugin that rewrites user prompts with the prompt-optimizer skill using a free OpenCode model",
+  "type": "module",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "skill"
+  ],
+  "scripts": {
+    "typecheck": "tsc --noEmit",
+    "test": "tsx --test test/*.test.ts"
+  },
+  "dependencies": {
+    "@opencode/plugin": "^2.3.2"
+  },
+  "devDependencies": {
+    "@types/node": "^24.0.0",
+    "tsx": "^4.20.0",
+    "typescript": "^5.9.0"
+  }
+}
