@@ -1,0 +1,120 @@
+# autoprompter
+
+An OpenCode V2 plugin that intercepts each user prompt, rewrites it with the
+[`prompt-optimizer`](https://github.com/) skill using an auto-selected **free**
+OpenCode model, and submits only the rewritten prompt to the original session.
+
+## Features
+
+- Intercepts prompts through the `prompt` admission hook — no extra session,
+  no history, no hook recursion.
+- Automatically selects a free `opencode` model (with override + fallback).
+- Bundles a copy of the skill, or points at a live folder via `skillPath`.
+- Returns **only** the optimized prompt: code fences and explanations are stripped.
+- Fails open: any error, timeout, or empty result leaves the original prompt intact.
+- Skips `/` commands and `!` shell syntax so built-ins keep working.
+- Backs off after a rate-limit response instead of retrying every prompt.
+
+## Requirements
+
+- OpenCode v2.2+ (uses `Plugin.define` and the session `prompt` hook).
+- Node.js 20+.
+
+## Install
+
+Add the plugin to your OpenCode config (`~/.config/opencode/opencode.json`) by
+local path:
+
+```json
+{
+  "plugin": [
+    {
+      "package": "/absolute/path/to/autoprompter",
+      "options": { "enabled": true }
+    }
+  ]
+}
+```
+
+On this machine the entry is:
+
+```json
+{
+  "package": "C:/Users/Schooi/Documents/GitHub/autoprompter",
+  "options": { "enabled": true }
+}
+```
+
+Restart OpenCode (or run `opencode reload`) after changing the config.
+
+## Options
+
+Pass these in the plugin entry's `options` object:
+
+| Option | Default | Purpose |
+| --- | --- | --- |
+| `enabled` | `true` | Disable all rewriting without uninstalling. |
+| `skillPath` | bundled copy | Absolute path to a live `prompt-optimizer` folder. |
+| `model` | auto-discovered | `{ "providerID": "opencode", "id": "..." }` override. |
+| `excludePrefixes` | `["/", "!"]` | Prompts starting with these pass through unchanged. |
+| `timeoutMs` | `30000` | Max wait for the optimizer model, in milliseconds. |
+| `log` | `false` | Log every original → optimized rewrite. |
+
+## How it works
+
+1. A `prompt` admission hook receives the incoming user prompt.
+2. Empty prompts, command prefixes, and prompts during a rate-limit cooldown are
+   passed through.
+3. The bundled `prompt-optimizer` skill plus the original prompt are sent to
+   `ctx.experimental.generate.text()` on a free `opencode` model (falling back to
+   `ctx.generate.text()` on older versions).
+4. The response is trimmed/unwrapped and replaces `event.prompt.text`. Stale
+   `mention` offsets on attachments are cleared.
+5. Any error or empty result leaves the original prompt untouched.
+
+The skill's normal "Deliver" section asks for a fenced prompt plus an
+explanation; the plugin's output contract overrides that so the model returns
+only the rewritten text.
+
+## Model selection
+
+`pickModel()` filters `ctx.model.list()` to provider `opencode` with `free` in
+the model id, ranks fast/flash models first (`deepseek-v4.1-flash-free`,
+`mimo-v2.6-flash-free`, `hy4-flash-free`, `beam-free`, ...), and picks the
+highest-ranked model. If discovery fails it falls back to `opencode/beam-free`.
+
+Note: OpenCode's `model.list()` returns `{ data: [...] }` in practice even
+though the docs describe an array; both shapes are handled.
+
+## Development
+
+```pwsh
+npm install
+npm run typecheck
+npm test
+```
+
+The repo is laid out as:
+
+```
+src/          plugin implementation (index, model, prompt, skill)
+skill/        bundled copy of prompt-optimizer (SKILL.md + references/)
+test/         node:test unit tests
+```
+
+## Troubleshooting
+
+- **No rewriting happening:** enable `"log": true`, restart OpenCode, and check
+  the log for a `rate_limit` / `429` message. The free tier may be exhausted;
+  the plugin intentionally falls back to the original prompt and pauses briefly.
+- **Wrong model selected:** set `options.model` explicitly to force one.
+- **Skill drift:** set `options.skillPath` to your live skill folder instead of
+  using the bundled copy.
+
+## Limitations
+
+- `ctx.experimental.generate.text()` is experimental; future OpenCode API
+  changes may require an update.
+- Every eligible prompt adds one extra model call (latency; no cost on free
+  models).
+- Prompt hooks run once at admission; option changes need a new session/prompt.
