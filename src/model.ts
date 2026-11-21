@@ -21,7 +21,7 @@ const PREFERRED = [
   "nemotron-3.5-lightning-free",
 ]
 
-export const DEFAULT_MAX_CANDIDATES = 6
+export const DEFAULT_MAX_CANDIDATES = 12
 
 export const FALLBACK_MODEL: ModelRef = { providerID: "opencode", id: "beam-free" }
 

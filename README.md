@@ -58,14 +58,14 @@ Pass these in the plugin entry's `options` object:
 | `model` | auto-discovered | `{ "providerID": "opencode", "id": "..." }` override. |
 | `excludePrefixes` | `["/", "!"]` | Prompts starting with these pass through unchanged. |
 | `timeoutMs` | `30000` | Max total wait across all optimizer attempts, in milliseconds. |
-| `maxCandidates` | `6` | How many free models to try (the fallback is always kept). |
+| `maxCandidates` | `12` | How many free models to try (the fallback is always kept). |
 | `log` | `false` | Log every original → optimized rewrite. |
 
 ## How it works
 
 1. A `prompt` admission hook receives the incoming user prompt.
-2. Empty prompts, command prefixes, and prompts during a rate-limit cooldown are
-   passed through.
+2. Empty prompts and command prefixes are passed through. Every other prompt
+   gets a fresh optimizer attempt; a past failure never silences later prompts.
 3. The bundled `prompt-optimizer` skill plus the original prompt are sent to
    `ctx.experimental.generate.text()` on a free `opencode` model (falling back to
    `ctx.generate.text()` on older versions).

@@ -20,6 +20,15 @@ test("sanitize leaves plain text alone and rejects empties", () => {
   assert.equal(sanitize(undefined), "")
 })
 
+test("sanitize strips leaked reasoning markers", () => {
+  assert.equal(
+    sanitize("Write a sum function.</ernie:think>Write a sum function."),
+    "Write a sum function.",
+  )
+  assert.equal(sanitize("<think>reasoning</think>the answer"), "the answer")
+  assert.equal(sanitize("the answer<think>reasoning</think>"), "the answer")
+})
+
 test("buildPrompt embeds skill and strict output contract", () => {
   const prompt = buildPrompt("SKILL BODY", "original task")
   assert.ok(prompt.includes("SKILL BODY"))

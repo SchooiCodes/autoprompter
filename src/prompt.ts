@@ -26,11 +26,42 @@ export function buildPrompt(skill: string, original: string): string {
   ].join("\n")
 }
 
-/** Trim the model output and unwrap a single surrounding Markdown fence. */
+const REASONING_TAG = "(?:think|thinking|reasoning|analysis|ernie:think)"
+
+/**
+ * Some free models leak their reasoning markers into the answer (for example
+ * `answer</ernie:think>answer`). Keep only the actual answer.
+ */
+export function stripReasoning(text: string): string {
+  const closeRe = new RegExp(`</\\s*${REASONING_TAG}\\s*>`, "gi")
+  const openRe = new RegExp(`<\\s*${REASONING_TAG}\\b[^>]*>`, "gi")
+
+  let lastClose: RegExpExecArray | null = null
+  let match: RegExpExecArray | null
+  while ((match = closeRe.exec(text)) !== null) lastClose = match
+  if (lastClose) {
+    const after = text.slice(lastClose.index + lastClose[0].length).trim()
+    if (after) return after
+  }
+
+  const firstOpen = openRe.exec(text)
+  if (firstOpen) {
+    const before = text.slice(0, firstOpen.index).trim()
+    if (before) return before
+  }
+
+  return text
+    .replace(new RegExp(`<\\s*${REASONING_TAG}\\b[^>]*>[\\s\\S]*?</\\s*${REASONING_TAG}\\s*>`, "gi"), "")
+    .replace(closeRe, "")
+    .replace(openRe, "")
+    .trim()
+}
+
+/** Trim the model output, strip reasoning leakage, and unwrap a single fence. */
 export function sanitize(text: string | undefined | null): string {
   if (!text) return ""
   let result = text.trim()
   const fenced = result.match(/^```[^\n]*\r?\n([\s\S]*?)\r?\n[ \t]*```[ \t]*$/)
   if (fenced) result = fenced[1]!.trim()
-  return result
+  return stripReasoning(result)
 }

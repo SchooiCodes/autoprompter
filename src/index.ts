@@ -105,18 +105,13 @@ export default Plugin.define({
       )
     }
 
-    // A free-model rate limit can last hours; avoid re-firing a doomed call
-    // for every prompt. Cap the pause so a long outage cannot disable us forever.
-    let cooldownUntil = 0
-    const MAX_COOLDOWN_MS = 60 * 60 * 1000
-
+    // No cross-prompt cooldown: a past rate limit must never make the plugin
+    // silently skip future prompts. Each prompt gets a fresh attempt across
+    // the whole free-model chain; only that single prompt fails open if all
+    // candidates are unavailable.
     const registration = await ctx.session.hook("prompt", async (event) => {
       const original = event.prompt?.text
       if (typeof original !== "string" || original.trim().length === 0) return
-      if (Date.now() < cooldownUntil) {
-        if (verbose) console.warn("[autoprompter] optimizer cooling down; using original prompt")
-        return
-      }
 
       const leading = original.trimStart()
       if (excludePrefixes.some((prefix) => prefix && leading.startsWith(prefix))) return
@@ -163,11 +158,8 @@ export default Plugin.define({
           console.warn(`[autoprompter] ${JSON.stringify(original)} -> ${JSON.stringify(optimized)}`)
         }
       } catch (error) {
-        // Fail open: never block the user's message because optimization failed.
-        const retryAfter = (error as { retryAfterMs?: unknown })?.retryAfterMs
-        if (typeof retryAfter === "number" && retryAfter > 0) {
-          cooldownUntil = Date.now() + Math.min(retryAfter, MAX_COOLDOWN_MS)
-        }
+        // Fail open for this prompt only. No shared state is changed, so the
+        // very next prompt is optimized from scratch.
         console.warn("[autoprompter] optimization failed; using original prompt:", error)
       }
     })

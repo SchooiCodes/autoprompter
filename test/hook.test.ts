@@ -112,24 +112,31 @@ test("legacy ctx.generate.text is used when experimental API is absent", async (
   assert.equal(event.prompt.text, "LEGACY_OK")
 })
 
-test("retryAfterMs error pauses optimization until cooldown expires", async () => {
+test("a rate-limited prompt never silences later prompts (no cooldown)", async () => {
   let calls = 0
   const fake = makeCtx(
     { enabled: true, model: { providerID: "opencode", id: "beam-free" } },
     async () => {
       calls++
-      const err = new Error("rate limited") as Error & { retryAfterMs: number }
-      err.retryAfterMs = 10_000
-      throw err
+      if (calls === 1) {
+        const err = new Error("rate limited") as Error & { retryAfterMs: number }
+        err.retryAfterMs = 10_000
+        throw err
+      }
+      return { text: "RECOVERED" }
     },
   )
   await plugin.setup(fake.ctx as never)
   const hook = fake.getHook()
 
-  await hook({ prompt: { text: "first" } })
-  assert.equal(calls, 1)
-  await hook({ prompt: { text: "second" } })
-  assert.equal(calls, 1, "second prompt must be skipped while cooling down")
+  const first = { prompt: { text: "first" } }
+  await hook(first)
+  assert.equal(first.prompt.text, "first", "first prompt fails open")
+
+  const second = { prompt: { text: "second" } }
+  await hook(second)
+  assert.equal(calls, 2, "the next prompt must still try the optimizer")
+  assert.equal(second.prompt.text, "RECOVERED", "the next prompt is swapped")
 })
 
 test("falls back to another free model when the session model is rate limited", async () => {
