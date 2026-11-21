@@ -2,6 +2,7 @@
   "name": "autoprompter",
   "version": "1.0.0",
   "description": "OpenCode V2 plugin that rewrites user prompts with the prompt-optimizer skill using a free OpenCode model",
+  "license": "MIT",
   "type": "module",
   "exports": {
     ".": "./src/index.ts"

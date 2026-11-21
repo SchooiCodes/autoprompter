@@ -118,3 +118,7 @@ test/         node:test unit tests
 - Every eligible prompt adds one extra model call (latency; no cost on free
   models).
 - Prompt hooks run once at admission; option changes need a new session/prompt.
+
+## License
+
+[MIT](LICENSE) © 2026 SchooiCodes
