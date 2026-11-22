@@ -16,6 +16,8 @@ type Options = {
   excludePrefixes?: string[]
   timeoutMs?: number
   maxCandidates?: number
+  /** Show the optimized text in the message instead of the text you typed. */
+  showOptimized?: boolean
   log?: boolean
 }
 
@@ -26,6 +28,10 @@ type PromptEvent = {
   prompt: {
     text: string
     files?: readonly PromptFile[]
+  }
+  metadata?: {
+    displayText?: string
+    [key: string]: unknown
   }
 }
 type GenerateResult = { text: string }
@@ -83,6 +89,7 @@ export default Plugin.define({
     const maxCandidates = options.maxCandidates ?? DEFAULT_MAX_CANDIDATES
     const excludePrefixes = options.excludePrefixes ?? ["/", "!"]
     const timeoutMs = options.timeoutMs ?? 30_000
+    const showOptimized = options.showOptimized !== false
     const verbose = options.log === true
 
     const generate = (model: ModelRef, prompt: string): Promise<GenerateResult> => {
@@ -151,6 +158,13 @@ export default Plugin.define({
         )
 
         event.prompt.text = optimized
+        // The model receives the clean rewrite. Show that same rewrite in the
+        // message bubble so you can read and copy exactly what was sent.
+        if (showOptimized) {
+          if (!event.metadata) event.metadata = {}
+          event.metadata.originalText = original
+          event.metadata.displayText = optimized
+        }
         // Offsets in attachment mentions refer to the old text and are now stale.
         for (const file of event.prompt.files ?? []) delete file.mention
 

@@ -7,6 +7,7 @@ type GenerateImpl = (input: GenerateInput) => Promise<{ text: string }>
 type HookCb = (event: {
   model?: { providerID: string; id: string }
   prompt: { text: string; files?: Array<{ mention?: unknown; [k: string]: unknown }> }
+  metadata?: { displayText?: string; originalText?: string; [k: string]: unknown }
 }) => Promise<void> | void
 
 /** Minimal fake of the V2 plugin context, with the prompt hook captured. */
@@ -53,10 +54,13 @@ test("setup registers a prompt hook and rewrites eligible prompts", async () => 
   const cleanup = await plugin.setup(fake.ctx as never)
   const event = {
     prompt: { text: "make this better", files: [{ mention: { offset: 3 }, path: "a.txt" }] },
+    metadata: { displayText: "make this better", originalText: undefined as string | undefined },
   }
   await fake.getHook()(event)
 
   assert.equal(event.prompt.text, "REWRITE_OK")
+  assert.equal(event.metadata?.displayText, "REWRITE_OK", "message bubble shows what was sent")
+  assert.equal(event.metadata?.originalText, "make this better", "typed text is preserved")
   assert.equal(seen.length, 1)
   assert.ok(seen[0]!.prompt.includes("make this better"))
   assert.ok(seen[0]!.prompt.includes("Return ONLY the optimized prompt as plain text"))

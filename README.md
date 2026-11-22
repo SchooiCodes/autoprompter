@@ -59,6 +59,7 @@ Pass these in the plugin entry's `options` object:
 | `excludePrefixes` | `["/", "!"]` | Prompts starting with these pass through unchanged. |
 | `timeoutMs` | `30000` | Max total wait across all optimizer attempts, in milliseconds. |
 | `maxCandidates` | `12` | How many free models to try (the fallback is always kept). |
+| `showOptimized` | `true` | Show the optimized text in the message bubble; the typed text is kept in `metadata.originalText`. Set `false` to show what you typed. |
 | `log` | `false` | Log every original → optimized rewrite. |
 
 ## How it works
