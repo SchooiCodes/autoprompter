@@ -1,6 +1,11 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
-import { buildPrompt, sanitize } from "../src/prompt.js"
+import {
+  buildPrompt,
+  CLARIFICATION_SENTINEL,
+  isRejectedRewrite,
+  sanitize,
+} from "../src/prompt.js"
 import {
   FALLBACK_MODEL,
   pickModel,
@@ -27,6 +32,59 @@ test("sanitize strips leaked reasoning markers", () => {
   )
   assert.equal(sanitize("<think>reasoning</think>the answer"), "the answer")
   assert.equal(sanitize("the answer<think>reasoning</think>"), "the answer")
+})
+
+// BUG 1: a fenced answer with surrounding prose must be unwrapped.
+test("sanitize extracts a fenced block surrounded by prose", () => {
+  assert.equal(
+    sanitize(
+      "```text\nSummarize the document in three sentences.\n```\n\nChanged: added a sentence count.",
+    ),
+    "Summarize the document in three sentences.",
+  )
+  assert.equal(sanitize("Here:\n```ts\nconst x=1\n```\nDone."), "const x=1")
+})
+
+// BUG 4: multiple close tags must not discard the real answer text.
+test("sanitize preserves text across multiple reasoning close tags", () => {
+  assert.equal(sanitize("bc"), "bc")
+  assert.equal(sanitize("b</think>c</think>d"), "bcd")
+  assert.equal(sanitize("one</ernie:think>two</ernie:think>three"), "onetwothree")
+})
+
+// BUG 5: a prompt that is itself a fence must keep its code fence.
+test("sanitize keeps a fenced block when the original prompt was a fence", () => {
+  const fenced = "```ts\nconst x = 1\n```"
+  assert.equal(sanitize(fenced, fenced), fenced)
+  assert.equal(sanitize(fenced, "original prompt"), "const x = 1")
+})
+
+// BUGS 2 & 3 post-generation validation helpers.
+test("isRejectedRewrite rejects clarification, scaffolding and invented placeholders", () => {
+  assert.equal(
+    isRejectedRewrite(
+      "Before I optimize, which plugin do you mean? What does it take as input and output?",
+      "test my plugin",
+    ),
+    true,
+  )
+  assert.equal(isRejectedRewrite(CLARIFICATION_SENTINEL, "test my plugin"), true)
+  assert.equal(
+    isRejectedRewrite(
+      "Test the autoprompter plugin with {{SAMPLE_INPUTS}} and verify {{EXPECTED_OUTPUT}}",
+      "test my plugin",
+    ),
+    true,
+  )
+  assert.equal(
+    isRejectedRewrite("Changed: added a sentence count\n- one", "summarize this"),
+    true,
+  )
+  assert.equal(
+    isRejectedRewrite("Use {{SAMPLE_INPUTS}} verbatim.", "Use {{SAMPLE_INPUTS}} verbatim."),
+    false,
+  )
+  assert.equal(isRejectedRewrite("Rewrite this sentence clearly.", "this"), false)
 })
 
 test("buildPrompt embeds skill and strict output contract", () => {
@@ -115,6 +173,13 @@ test("rankCandidates puts the current session model first and keeps the fallback
     id: "liquid/lfm-3-1.7b:free",
   })
   assert.ok(ranked.some((m) => m.providerID === FALLBACK_MODEL.providerID && m.id === FALLBACK_MODEL.id))
+})
+
+// BUG 7: limit is the total candidate count, including the fallback slot.
+test("rankCandidates treats limit as the total including the fallback", () => {
+  const ranked = rankCandidates([{ providerID: "opencode", id: "hy4-flash-free" }], null, 1)
+  assert.equal(ranked.length, 1)
+  assert.deepEqual(ranked[0], FALLBACK_MODEL)
 })
 
 test("pickModels honors an override as the only candidate", async () => {

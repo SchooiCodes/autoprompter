@@ -7,7 +7,7 @@ import {
   type ModelRef,
 } from "./model.js"
 import { loadSkill } from "./skill.js"
-import { buildPrompt, sanitize } from "./prompt.js"
+import { buildPrompt, isRejectedRewrite, sanitize } from "./prompt.js"
 
 type Options = {
   enabled?: boolean
@@ -36,6 +36,26 @@ type PromptEvent = {
 }
 type GenerateResult = { text: string }
 type Registration = { dispose(): Promise<void> | void }
+
+/**
+ * A leading `!` is an OpenCode shell escape only when it is followed by a
+ * command-like token. Prose such as `!Important: ...` must still be optimized.
+ */
+function isShellEscape(text: string): boolean {
+  if (!text.startsWith("!")) return false
+  const rest = text.slice(1)
+  if (!/^[a-z]/.test(rest)) return false
+  const firstWord = rest.split(/\s/, 1)[0] ?? ""
+  return !firstWord.includes(":")
+}
+
+function isExcludedPrefix(text: string, prefixes: readonly string[]): boolean {
+  return prefixes.some((prefix) => {
+    if (!prefix) return false
+    if (prefix === "!") return isShellEscape(text)
+    return text.startsWith(prefix)
+  })
+}
 
 /** The subset of the V2 plugin context this plugin relies on. */
 interface AutoprompterContext {
@@ -121,7 +141,7 @@ export default Plugin.define({
       if (typeof original !== "string" || original.trim().length === 0) return
 
       const leading = original.trimStart()
-      if (excludePrefixes.some((prefix) => prefix && leading.startsWith(prefix))) return
+      if (isExcludedPrefix(leading, excludePrefixes)) return
 
       try {
         // Prefer the model the session is already using; fall back through the
@@ -137,14 +157,23 @@ export default Plugin.define({
             for (const candidate of candidates) {
               try {
                 const result = await generate(candidate, input)
-                const text = sanitize(result?.text)
-                if (text) {
+                const text = sanitize(result?.text, original)
+                if (text && !isRejectedRewrite(text, original)) {
                   if (verbose) {
                     console.warn(`[autoprompter] optimized with ${candidate.providerID}/${candidate.id}`)
                   }
                   return text
                 }
-                lastError = new Error(`empty result from ${candidate.providerID}/${candidate.id}`)
+                if (verbose && text) {
+                  console.warn(
+                    `[autoprompter] rejected non-rewrite from ${candidate.providerID}/${candidate.id}`,
+                  )
+                }
+                lastError = new Error(
+                  text
+                    ? `rejected optimizer output from ${candidate.providerID}/${candidate.id}`
+                    : `empty result from ${candidate.providerID}/${candidate.id}`,
+                )
               } catch (error) {
                 lastError = error
                 if (verbose) {

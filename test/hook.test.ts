@@ -1,6 +1,7 @@
 import assert from "node:assert/strict"
 import { test } from "node:test"
 import plugin from "../src/index.js"
+import { CLARIFICATION_SENTINEL } from "../src/prompt.js"
 
 type GenerateInput = { model: { providerID: string; id: string }; prompt: string }
 type GenerateImpl = (input: GenerateInput) => Promise<{ text: string }>
@@ -89,6 +90,63 @@ test("excluded prefixes, commands and empty prompts are passed through", async (
     assert.equal(event.prompt.text, text)
   }
   assert.equal(calls, 0, "optimizer must not be called for skipped prompts")
+})
+
+// BUG 6: only command-like `!` text is a shell escape; prose is optimized.
+test("a leading ! is a shell escape only for command-like text", async () => {
+  let calls = 0
+  const fake = makeCtx(
+    { enabled: true, model: { providerID: "opencode", id: "beam-free" } },
+    async () => {
+      calls++
+      return { text: "REWRITE_OK" }
+    },
+  )
+  await plugin.setup(fake.ctx as never)
+  const hook = fake.getHook()
+
+  for (const text of ["!git status", "!ls -la"]) {
+    const event = { prompt: { text } }
+    await hook(event)
+    assert.equal(event.prompt.text, text, `${text} must be skipped`)
+  }
+  assert.equal(calls, 0)
+
+  const prose = { prompt: { text: "!Important: fix the bug in the report" } }
+  await hook(prose)
+  assert.equal(prose.prompt.text, "REWRITE_OK", "prose must be optimized")
+  assert.equal(calls, 1)
+})
+
+// BUG 2: clarifying questions / explicit decline must fail open.
+test("clarifying question or sentinel output leaves the original prompt unchanged", async () => {
+  for (const raw of [
+    "Before I optimize, which plugin do you mean? What does it take as input and output? Please provide 2-3 sample inputs.",
+    CLARIFICATION_SENTINEL,
+  ]) {
+    const fake = makeCtx(
+      { enabled: true, model: { providerID: "opencode", id: "beam-free" } },
+      async () => ({ text: raw }),
+    )
+    await plugin.setup(fake.ctx as never)
+    const event = { prompt: { text: "test my plugin" } }
+    await fake.getHook()(event)
+    assert.equal(event.prompt.text, "test my plugin", `rejected raw: ${raw}`)
+  }
+})
+
+// BUG 3: invented placeholders / scaffolding must fail open.
+test("fabricated placeholders and scaffolding leave the original prompt unchanged", async () => {
+  const fake = makeCtx(
+    { enabled: true, model: { providerID: "opencode", id: "beam-free" } },
+    async () => ({
+      text: "Test the autoprompter plugin with {{SAMPLE_INPUTS}} and verify {{EXPECTED_OUTPUT}}, reporting PASS or FAIL for each.",
+    }),
+  )
+  await plugin.setup(fake.ctx as never)
+  const event = { prompt: { text: "test my plugin" } }
+  await fake.getHook()(event)
+  assert.equal(event.prompt.text, "test my plugin")
 })
 
 test("fail open: a generate error leaves the original prompt untouched", async () => {

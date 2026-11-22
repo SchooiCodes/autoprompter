@@ -83,11 +83,18 @@ export function rankCandidates(
     return rankFree(a.id) - rankFree(b.id) || a.providerID.localeCompare(b.providerID) || a.id.localeCompare(b.id)
   })
 
-  const ranked = unique.slice(0, Math.max(1, limit))
-  if (!ranked.some((model) => same(model, FALLBACK_MODEL))) {
-    ranked.push({ ...FALLBACK_MODEL })
+  // `limit` is the TOTAL number of candidates. One slot is always reserved
+  // for the hardcoded fallback, so a limit of 1 yields just the fallback and
+  // a limit of 2 yields the best discovered model plus the fallback.
+  const total = Math.max(1, limit)
+  const others = unique.filter((model) => !same(model, FALLBACK_MODEL))
+  const selected = others.slice(0, total - 1)
+  if (current && same(current, FALLBACK_MODEL)) {
+    // Keep the current model first even when it is the fallback itself.
+    return [{ ...FALLBACK_MODEL }, ...selected.slice(0, total - 1)].slice(0, total)
   }
-  return ranked
+  selected.push({ ...FALLBACK_MODEL })
+  return selected.slice(0, total)
 }
 
 /** Ordered candidate list for the optimizer. An explicit override wins outright. */
