@@ -5,7 +5,9 @@ bundled [`prompt-design`](vendor/prompt-design/SKILL.md) skill using an
 auto-selected **free** OpenCode model, and submits only the rewritten prompt to
 the original session.
 
-Published on npm as [`autoprompter`](https://www.npmjs.com/package/autoprompter).
+Install from GitHub with
+`opencode plugin add github:SchooiCodes/autoprompter`. The npm package is not
+published yet; see [Install](#install).
 
 ## Features
 
@@ -32,17 +34,21 @@ Published on npm as [`autoprompter`](https://www.npmjs.com/package/autoprompter)
 
 ## Install
 
-Install from npm:
+Install the latest GitHub source:
+
+```sh
+opencode plugin add github:SchooiCodes/autoprompter
+```
+
+The npm package is not published yet. Once it is, the equivalent command will
+be:
 
 ```sh
 opencode plugin add autoprompter
 ```
 
-Or install the latest GitHub source:
-
-```sh
-opencode plugin add github:SchooiCodes/autoprompter
-```
+If `opencode` is not on your `PATH`, use the full path to the CLI, for example
+`~/.local/bin/opencode plugin add github:SchooiCodes/autoprompter`.
 
 For local development, add the plugin to your OpenCode config
 (`~/.config/opencode/opencode.json`) by path:
@@ -137,10 +143,12 @@ though the docs describe an array; both shapes are handled.
 Copy and paste this into any coding LLM:
 
 > Install the OpenCode plugin `autoprompter` for me. Run
-> `opencode plugin add autoprompter`, then verify with `opencode plugin list`
-> that `autoprompter` is present and active. If OpenCode is already running,
-> run `opencode reload`. Report the exact commands you ran and whether the
-> plugin is active. Do not change any other plugins or settings.
+> `opencode plugin add github:SchooiCodes/autoprompter`, then verify with
+> `opencode plugin list` that `autoprompter` is present and active. If
+> `opencode` is not on your `PATH`, find the CLI first and use its full path. If
+> OpenCode is already running, run `opencode reload`. Report the exact commands
+> you ran and whether the plugin is active. Do not change any other plugins or
+> settings.
 
 ## Development
 
